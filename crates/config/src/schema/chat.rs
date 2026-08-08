@@ -32,6 +32,14 @@ pub struct ChatConfig {
     /// Compaction strategy and tuning knobs. See [`CompactionConfig`].
     #[serde(default)]
     pub compaction: CompactionConfig,
+    /// Maintain an FTS5 search index over session transcripts.
+    ///
+    /// Powers ranked cross-session recall in the `sessions_search` tool
+    /// (discovery snippets with context, scroll-around-match). Transcript
+    /// JSONL files stay the source of truth; the index is rebuilt lazily on
+    /// startup when missing. Disable to fall back to substring scanning.
+    #[serde(default = "default_session_search_index")]
+    pub session_search_index: bool,
 }
 
 fn default_auto_title() -> bool {
@@ -50,6 +58,10 @@ fn default_workspace_file_max_chars() -> usize {
     32_000
 }
 
+fn default_session_search_index() -> bool {
+    true
+}
+
 impl Default for ChatConfig {
     fn default() -> Self {
         Self {
@@ -61,6 +73,7 @@ impl Default for ChatConfig {
             priority_models: Vec::new(),
             allowed_models: Vec::new(),
             compaction: CompactionConfig::default(),
+            session_search_index: default_session_search_index(),
         }
     }
 }

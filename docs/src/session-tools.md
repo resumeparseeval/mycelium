@@ -33,16 +33,44 @@ Input:
 
 ### `sessions_search`
 
-Search prior session history for relevant snippets. By default the current
-session is excluded when `_session_key` is available in tool context.
+Search prior conversations across sessions. By default the current session is
+excluded when `_session_key` is available in tool context.
+
+With the transcript search index enabled (`chat.session_search_index`, on by
+default), the tool runs in two modes backed by a SQLite FTS5 index with BM25
+ranking:
+
+**Discovery** — pass `query` to get the best-matching sessions. Each result
+includes the matching snippet, a window of surrounding messages, and "bookends"
+(how the session started and how it ended). Background `cron:` sessions rank
+below interactive ones. Messages archived by compaction stay searchable and are
+flagged `compacted`.
 
 ```json
 {
   "query": "checkpoint rollback",
-  "limit": 5,
-  "exclude_current": true
+  "limit": 3,
+  "sort": "rank",
+  "roles": ["user", "assistant"]
 }
 ```
+
+**Scroll** — pass `key` and `around_index` (from a discovery result) to page
+through one session around a match.
+
+```json
+{
+  "key": "session:abc",
+  "around_index": 42,
+  "window": 5
+}
+```
+
+Exact phrases can be quoted (`"\"flaky websocket\""`); FTS operators in queries
+are treated as literal text. When the index is disabled the tool falls back to
+a substring scan returning one snippet per session. Transcript JSONL files
+remain the source of truth; the index is rebuilt incrementally at startup if
+missing.
 
 ### `sessions_send`
 

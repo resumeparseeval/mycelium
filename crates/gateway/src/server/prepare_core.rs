@@ -651,7 +651,25 @@ pub async fn prepare_gateway_core_with_profile(
     // Wire stores.
     let project_store: Arc<dyn ProjectStore> =
         Arc::new(moltis_projects::SqliteProjectStore::new(db_pool.clone()));
-    let session_store = Arc::new(SessionStore::new(sessions_dir));
+    let session_store = if config.chat.session_search_index {
+        let index = Arc::new(moltis_sessions::SessionSearchIndex::new(db_pool.clone()));
+        Arc::new(SessionStore::new(sessions_dir).with_search_index(index))
+    } else {
+        Arc::new(SessionStore::new(sessions_dir))
+    };
+    if let Some(index) = session_store.search_index().cloned() {
+        // Catch the index up with transcripts written before it existed (or
+        // while it was disabled). Incremental and idempotent, so running it
+        // on every startup is cheap once the index is warm.
+        let store = session_store.clone();
+        tokio::spawn(async move {
+            match index.sync_all(&store).await {
+                Ok(0) => {},
+                Ok(indexed) => info!(indexed, "session search index backfilled"),
+                Err(error) => warn!(%error, "session search index backfill failed"),
+            }
+        });
+    }
     let event_bus_for_metadata = session_event_bus.clone();
     let session_metadata = Arc::new(SqliteSessionMetadata::with_event_bus(
         db_pool.clone(),

@@ -396,6 +396,7 @@ pub(super) fn build_schema_map() -> KnownKeys {
                 ("context_command", Leaf),
                 ("priority_models", Leaf),
                 ("allowed_models", Leaf),
+                ("session_search_index", Leaf),
                 (
                     "compaction",
                     Struct(HashMap::from([

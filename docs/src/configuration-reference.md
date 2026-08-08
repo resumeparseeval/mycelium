@@ -288,6 +288,7 @@ User profile collected during onboarding.
 | `context_command` | optional string | `null` | Command run before each turn to generate additional prompt context. Stdout is appended to normal chat project context and external-agent context snapshots. Runs in the session worktree or bound project directory when a project is active, otherwise the server's working directory. Times out after 30s; stdout is capped at 32,000 bytes (truncated beyond that). |
 | `priority_models` | array | `[]` | Preferred model IDs to show first in selectors (full or raw model IDs). |
 | `allowed_models` | array | `[]` | ⚠️ **Deprecated.** Legacy model allowlist kept for backward compatibility; currently ignored (model visibility is provider-driven). Will be removed in a future release. |
+| `session_search_index` | boolean | `true` | Maintain an FTS5 search index over session transcripts for ranked cross-session recall in `sessions_search` (discovery snippets with context, scroll-around-match). Transcript JSONL files remain the source of truth; the index is backfilled incrementally at startup. Disable to fall back to substring scanning. |
 
 
 ### `chat.compaction` — CompactionConfig

@@ -250,7 +250,10 @@ impl AgentTool for SessionsSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search past session history for relevant snippets across sessions."
+        "Search past conversations across sessions. Discovery mode (pass `query`) returns the \
+         best-matching sessions with a snippet, surrounding messages, and how each session \
+         started and ended. Scroll mode (pass `key` + `around_index`) pages through one \
+         session around a previous match. Use sessions_history to read a full session."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -259,34 +262,181 @@ impl AgentTool for SessionsSearchTool {
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query to match against prior session messages."
+                    "description": "Search query. Words are matched with BM25 ranking; use \"double quotes\" for exact phrases."
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum results returned (default: 5, max: 20)."
+                    "description": "Maximum sessions returned in discovery mode (default: 3, max: 10)."
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Scroll mode: session key to page through (from a discovery result)."
+                },
+                "around_index": {
+                    "type": "integer",
+                    "description": "Scroll mode: message index to center the window on."
+                },
+                "window": {
+                    "type": "integer",
+                    "description": "Scroll mode: messages either side of around_index (default: 5, max: 20)."
+                },
+                "sort": {
+                    "type": "string",
+                    "enum": ["rank", "newest", "oldest"],
+                    "description": "Result order in discovery mode (default: rank)."
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["user", "assistant", "tool"]},
+                    "description": "Roles to match (default: user and assistant)."
                 },
                 "exclude_current": {
                     "type": "boolean",
-                    "description": "Exclude the current session from results when `_session_key` is available. Defaults to true."
+                    "description": "Exclude the current session from results. Defaults to true."
                 }
-            },
-            "required": ["query"]
+            }
         })
     }
 
     async fn execute(&self, params: Value) -> anyhow::Result<Value> {
+        let scroll_key = str_param(&params, "key");
+        let around_index = params.get("around_index").and_then(Value::as_i64);
+        if let (Some(key), Some(around)) = (scroll_key, around_index) {
+            return self.scroll(&params, key, around).await;
+        }
+
         let query = require_str(&params, "query")?;
-        let limit = u64_param(&params, "limit", 5).min(20) as usize;
+        match self.store.search_index() {
+            Some(index) => self.discover(&params, query, index.clone()).await,
+            None => self.legacy_search(&params, query).await,
+        }
+    }
+}
+
+impl SessionsSearchTool {
+    /// Session-key prefixes demoted below interactive sessions in discovery.
+    const DEMOTED_PREFIXES: &'static [&'static str] = &["cron:"];
+
+    fn current_session_key(params: &Value) -> Option<String> {
         let exclude_current = params
             .get("exclude_current")
             .or_else(|| params.get("excludeCurrent"))
             .and_then(Value::as_bool)
             .unwrap_or(true);
-        let current_session_key = if exclude_current {
-            str_param(&params, "_session_key")
-        } else {
-            None
-        };
+        exclude_current
+            .then(|| str_param(params, "_session_key").map(str::to_string))
+            .flatten()
+    }
+
+    fn can_access(&self, key: &str) -> bool {
+        self.policy
+            .as_ref()
+            .is_none_or(|policy| policy.can_access(key))
+    }
+
+    /// Discovery mode: FTS-ranked best hit per session with context.
+    async fn discover(
+        &self,
+        params: &Value,
+        query: &str,
+        index: Arc<moltis_sessions::SessionSearchIndex>,
+    ) -> anyhow::Result<Value> {
+        let limit = u64_param(params, "limit", 3).clamp(1, 10) as usize;
+
+        let mut search = moltis_sessions::SearchQuery::new(query);
+        search.limit = limit;
+        search.exclude_session = Self::current_session_key(params);
+        if let Some(sort) = params.get("sort")
+            && let Ok(sort) = serde_json::from_value(sort.clone())
+        {
+            search.sort = sort;
+        }
+        if let Some(roles) = params.get("roles").and_then(Value::as_array) {
+            search.roles = roles
+                .iter()
+                .filter_map(|role| serde_json::from_value(role.clone()).ok())
+                .collect();
+        }
+
+        let demote: Vec<String> = Self::DEMOTED_PREFIXES
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        let matches = index
+            .discover(&search, &demote, 5)
+            .await
+            .map_err(|e| Error::message(format!("session search failed: {e}")))?;
+
+        let entries: HashMap<String, moltis_sessions::metadata::SessionEntry> = self
+            .metadata
+            .list()
+            .await
+            .into_iter()
+            .map(|entry| (entry.key.clone(), entry))
+            .collect();
+
+        let results: Vec<Value> = matches
+            .into_iter()
+            .filter(|m| self.can_access(&m.session_key))
+            .map(|m| {
+                let entry = entries.get(&m.session_key);
+                serde_json::json!({
+                    "key": m.session_key,
+                    "label": entry.and_then(|e| e.label.clone()),
+                    "model": entry.and_then(|e| e.model.clone()),
+                    "agentId": entry.and_then(|e| e.agent_id.clone()),
+                    "updatedAt": entry.map(|e| e.updated_at),
+                    "match": {
+                        "index": m.hit.seq,
+                        "role": m.hit.role,
+                        "snippet": m.hit.snippet,
+                        "compacted": m.hit.compacted,
+                        "createdAt": m.hit.created_at,
+                    },
+                    "bookendStart": context_json(&m.bookend_start),
+                    "context": context_json(&m.context),
+                    "bookendEnd": context_json(&m.bookend_end),
+                    "messagesBefore": m.messages_before,
+                    "messagesAfter": m.messages_after,
+                })
+            })
+            .collect();
+
+        Ok(serde_json::json!({
+            "mode": "discovery",
+            "query": query,
+            "count": results.len(),
+            "results": results,
+            "hint": "Scroll with {key, around_index}; read a full session with sessions_history.",
+        }))
+    }
+
+    /// Scroll mode: a window of messages around one index in one session.
+    async fn scroll(&self, params: &Value, key: &str, around: i64) -> anyhow::Result<Value> {
+        if !self.can_access(key) {
+            return Err(Error::message(format!("session access denied: {key}")).into());
+        }
+        let index = self.store.search_index().ok_or_else(|| {
+            Error::message("session search index is disabled; use sessions_history instead")
+        })?;
+        let window = u64_param(params, "window", 5).clamp(1, 20) as usize;
+        let (messages, before, after) = index
+            .context(key, around, window)
+            .await
+            .map_err(|e| Error::message(format!("failed to read session context: {e}")))?;
+        Ok(serde_json::json!({
+            "mode": "scroll",
+            "key": key,
+            "messages": context_json(&messages),
+            "messagesBefore": before,
+            "messagesAfter": after,
+        }))
+    }
+
+    /// Fallback substring scan used when no search index is attached.
+    async fn legacy_search(&self, params: &Value, query: &str) -> anyhow::Result<Value> {
+        let limit = u64_param(params, "limit", 5).min(20) as usize;
+        let current_session_key = Self::current_session_key(params);
 
         let entries: HashMap<String, moltis_sessions::metadata::SessionEntry> = self
             .metadata
@@ -309,13 +459,11 @@ impl AgentTool for SessionsSearchTool {
                 break;
             }
 
-            if current_session_key == Some(hit.session_key.as_str()) {
+            if current_session_key.as_deref() == Some(hit.session_key.as_str()) {
                 continue;
             }
 
-            if let Some(ref policy) = self.policy
-                && !policy.can_access(&hit.session_key)
-            {
+            if !self.can_access(&hit.session_key) {
                 continue;
             }
 
@@ -342,6 +490,21 @@ impl AgentTool for SessionsSearchTool {
             "results": results,
         }))
     }
+}
+
+fn context_json(messages: &[moltis_sessions::search_index::ContextMessage]) -> Vec<Value> {
+    messages
+        .iter()
+        .map(|msg| {
+            serde_json::json!({
+                "index": msg.seq,
+                "role": msg.role,
+                "content": msg.content,
+                "createdAt": msg.created_at,
+                "isMatch": msg.is_match,
+            })
+        })
+        .collect()
 }
 
 #[async_trait]
@@ -881,6 +1044,165 @@ mod tests {
         let result = tool.execute(serde_json::json!({})).await?;
 
         assert_eq!(result["count"], 2);
+        Ok(())
+    }
+
+    // ── indexed search (discovery + scroll) ─────────────────────
+
+    async fn indexed_store(
+        dir: &tempfile::TempDir,
+    ) -> TestResult<(Arc<SessionStore>, Arc<SqliteSessionMetadata>)> {
+        let pool = sqlx::SqlitePool::connect(":memory:").await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY)")
+            .execute(&pool)
+            .await?;
+        moltis_sessions::run_migrations(&pool).await?;
+        SqliteSessionMetadata::init(&pool).await?;
+        let index = Arc::new(moltis_sessions::SessionSearchIndex::new(pool.clone()));
+        let store = Arc::new(SessionStore::new(dir.path().to_path_buf()).with_search_index(index));
+        let metadata = Arc::new(SqliteSessionMetadata::new(pool));
+        Ok((store, metadata))
+    }
+
+    #[tokio::test]
+    async fn indexed_discovery_returns_context_and_bookends() -> TestResult<()> {
+        let dir = tempfile::tempdir()?;
+        let (store, metadata) = indexed_store(&dir).await?;
+        metadata
+            .upsert("session:old", Some("Old work".to_string()))
+            .await?;
+        for i in 0..5 {
+            store
+                .append(
+                    "session:old",
+                    &serde_json::json!({"role": "user", "content": format!("filler {i}")}),
+                )
+                .await?;
+        }
+        store
+            .append(
+                "session:old",
+                &serde_json::json!({"role": "user", "content": "we fixed the flaky websocket test"}),
+            )
+            .await?;
+        store
+            .append(
+                "session:old",
+                &serde_json::json!({"role": "assistant", "content": "confirmed fix landed"}),
+            )
+            .await?;
+
+        let tool = SessionsSearchTool::new(store, metadata);
+        let result = tool
+            .execute(serde_json::json!({"query": "flaky websocket"}))
+            .await?;
+
+        assert_eq!(result["mode"], "discovery");
+        assert_eq!(result["count"], 1);
+        let hit = &result["results"][0];
+        assert_eq!(hit["key"], "session:old");
+        assert_eq!(hit["label"], "Old work");
+        assert!(
+            hit["match"]["snippet"]
+                .as_str()
+                .unwrap_or_default()
+                .contains(">>>flaky<<<")
+        );
+        assert_eq!(hit["match"]["index"], 5);
+        assert!(!hit["bookendStart"].as_array().unwrap_or(&vec![]).is_empty());
+        assert!(
+            hit["context"]
+                .as_array()
+                .unwrap_or(&vec![])
+                .iter()
+                .any(|m| m["isMatch"] == true)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn indexed_discovery_excludes_current_session() -> TestResult<()> {
+        let dir = tempfile::tempdir()?;
+        let (store, metadata) = indexed_store(&dir).await?;
+        store
+            .append(
+                "current",
+                &serde_json::json!({"role": "user", "content": "shared marker phrase"}),
+            )
+            .await?;
+        store
+            .append(
+                "other",
+                &serde_json::json!({"role": "user", "content": "shared marker phrase"}),
+            )
+            .await?;
+
+        let tool = SessionsSearchTool::new(store, metadata);
+        let result = tool
+            .execute(serde_json::json!({
+                "query": "shared marker",
+                "_session_key": "current",
+            }))
+            .await?;
+
+        assert_eq!(result["count"], 1);
+        assert_eq!(result["results"][0]["key"], "other");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn indexed_scroll_pages_around_index() -> TestResult<()> {
+        let dir = tempfile::tempdir()?;
+        let (store, metadata) = indexed_store(&dir).await?;
+        for i in 0..20 {
+            store
+                .append(
+                    "s1",
+                    &serde_json::json!({"role": "user", "content": format!("message {i}")}),
+                )
+                .await?;
+        }
+
+        let tool = SessionsSearchTool::new(store, metadata);
+        let result = tool
+            .execute(serde_json::json!({"key": "s1", "around_index": 10, "window": 2}))
+            .await?;
+
+        assert_eq!(result["mode"], "scroll");
+        let messages = result["messages"].as_array().cloned().unwrap_or_default();
+        assert_eq!(messages.len(), 5);
+        assert_eq!(messages[0]["index"], 8);
+        assert_eq!(messages[4]["index"], 12);
+        assert_eq!(result["messagesBefore"], 8);
+        assert_eq!(result["messagesAfter"], 7);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn indexed_search_respects_access_policy() -> TestResult<()> {
+        let dir = tempfile::tempdir()?;
+        let (store, metadata) = indexed_store(&dir).await?;
+        store
+            .append(
+                "agent:private:1",
+                &serde_json::json!({"role": "user", "content": "restricted content"}),
+            )
+            .await?;
+
+        let policy = SessionAccessPolicy {
+            key_prefix: Some("agent:public:".to_string()),
+            ..Default::default()
+        };
+        let tool = SessionsSearchTool::new(store, metadata).with_policy(policy);
+        let result = tool
+            .execute(serde_json::json!({"query": "restricted content"}))
+            .await?;
+        assert_eq!(result["count"], 0);
+
+        let scroll = tool
+            .execute(serde_json::json!({"key": "agent:private:1", "around_index": 0}))
+            .await;
+        assert!(scroll.is_err());
         Ok(())
     }
 }

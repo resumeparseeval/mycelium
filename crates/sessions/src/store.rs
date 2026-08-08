@@ -22,6 +22,10 @@ pub struct SearchResult {
 /// Append-only JSONL session storage with file locking.
 pub struct SessionStore {
     pub base_dir: PathBuf,
+    /// Optional derived FTS index kept in sync with transcript writes.
+    /// Index failures are logged, never propagated: search must not be able
+    /// to break transcript persistence.
+    search_index: Option<std::sync::Arc<crate::search_index::SessionSearchIndex>>,
 }
 
 #[must_use]
@@ -36,7 +40,26 @@ fn slice_on_char_boundaries(content: &str, start: usize, end: usize) -> &str {
 
 impl SessionStore {
     pub fn new(base_dir: PathBuf) -> Self {
-        Self { base_dir }
+        Self {
+            base_dir,
+            search_index: None,
+        }
+    }
+
+    /// Attach a search index that mirrors transcript writes.
+    #[must_use]
+    pub fn with_search_index(
+        mut self,
+        index: std::sync::Arc<crate::search_index::SessionSearchIndex>,
+    ) -> Self {
+        self.search_index = Some(index);
+        self
+    }
+
+    /// The attached search index, if any.
+    #[must_use]
+    pub fn search_index(&self) -> Option<&std::sync::Arc<crate::search_index::SessionSearchIndex>> {
+        self.search_index.as_ref()
     }
 
     /// Encode a session key as an injective, filesystem-safe component.
@@ -127,6 +150,12 @@ impl SessionStore {
             Ok(())
         })
         .await??;
+
+        if let Some(index) = &self.search_index
+            && let Err(error) = index.index_appended(key, message).await
+        {
+            tracing::warn!(session_key = %key, %error, "failed to index appended message");
+        }
 
         Ok(())
     }
@@ -265,10 +294,10 @@ impl SessionStore {
         let path = self.path_for(key);
         let media_dir = self.media_dir_for(key);
         let base_dir = self.base_dir.clone();
-        let key = key.to_string();
+        let owned_key = key.to_string();
 
         tokio::task::spawn_blocking(move || -> Result<()> {
-            storage_layout::suppress_legacy_fallback(&base_dir, &key)?;
+            storage_layout::suppress_legacy_fallback(&base_dir, &owned_key)?;
             if path.exists() {
                 fs::remove_file(&path)?;
             }
@@ -278,6 +307,12 @@ impl SessionStore {
             Ok(())
         })
         .await??;
+
+        if let Some(index) = &self.search_index
+            && let Err(error) = index.remove_session(key).await
+        {
+            tracing::warn!(session_key = %key, %error, "failed to remove session from index");
+        }
 
         Ok(())
     }
@@ -367,9 +402,17 @@ impl SessionStore {
     }
 
     /// Replace the entire session history with the given messages.
+    ///
+    /// When a search index is attached, previously indexed rows are archived
+    /// as `compacted` (still searchable) and the replacement messages are
+    /// indexed fresh.
     pub async fn replace_history(&self, key: &str, messages: Vec<serde_json::Value>) -> Result<()> {
         self.ensure_migrated(key).await?;
         let path = self.path_for(key);
+        let lines: Vec<String> = messages
+            .iter()
+            .map(serde_json::to_string)
+            .collect::<std::result::Result<_, _>>()?;
 
         tokio::task::spawn_blocking(move || -> Result<()> {
             if let Some(parent) = path.parent() {
@@ -384,13 +427,18 @@ impl SessionStore {
             let mut guard = lock
                 .write()
                 .map_err(|e| Error::lock_failed(e.to_string()))?;
-            for msg in &messages {
-                let line = serde_json::to_string(msg)?;
+            for line in &lines {
                 writeln!(*guard, "{line}")?;
             }
             Ok(())
         })
         .await??;
+
+        if let Some(index) = &self.search_index
+            && let Err(error) = index.index_replacement(key, &messages).await
+        {
+            tracing::warn!(session_key = %key, %error, "failed to index replaced history");
+        }
 
         Ok(())
     }
@@ -466,32 +514,8 @@ impl SessionStore {
         key: &str,
         messages: &[crate::message::PersistedMessage],
     ) -> Result<()> {
-        self.ensure_migrated(key).await?;
-        let path = self.path_for(key);
         let values: Vec<serde_json::Value> = messages.iter().map(|m| m.to_value()).collect();
-
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(&path)?;
-            let mut lock = RwLock::new(file);
-            let mut guard = lock
-                .write()
-                .map_err(|e| Error::lock_failed(e.to_string()))?;
-            for msg in &values {
-                let line = serde_json::to_string(msg)?;
-                writeln!(*guard, "{line}")?;
-            }
-            Ok(())
-        })
-        .await??;
-
-        Ok(())
+        self.replace_history(key, values).await
     }
 
     /// Append a typed message to the session file.

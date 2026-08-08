@@ -9,6 +9,7 @@ pub mod error;
 pub mod key;
 pub mod message;
 pub mod metadata;
+pub mod search_index;
 pub mod session_events;
 pub mod state_store;
 mod storage_layout;
@@ -18,6 +19,7 @@ pub use {
     error::{Error, Result},
     key::SessionKey,
     message::{ContentBlock, MessageContent, PersistedMessage, UserDocument},
+    search_index::{SearchQuery, SearchSort, SessionMatch, SessionSearchIndex},
     store::SearchResult,
 };
 

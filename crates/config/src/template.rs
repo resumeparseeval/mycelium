@@ -289,6 +289,8 @@ port = {port}                           # Port number (auto-generated for this i
                                     #   Runs in the active project/worktree dir when set, else the server cwd.
                                     #   Times out after 30s; stdout capped at 32,000 bytes.
 # priority_models = ["claude-opus-4-5", "gpt-5.6-sol", "gemini-3-flash"]  # Optional: models to pin first in selectors
+# session_search_index = true       # FTS5 index over session transcripts for ranked cross-session
+                                    #   recall in sessions_search. Disable to fall back to substring scan.
 
 # ── Compaction ─────────────────────────────────────────────────────────────
 # Strategy used to shrink a session when its context window fills up, or when
