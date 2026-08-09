@@ -419,6 +419,27 @@ This is the same approach used by OpenClaw. See the
 [comparison page](memory-comparison.md) for a detailed analysis of both
 systems.
 
+## Learning Reviews (Background Self-Review)
+
+With `[learning]` enabled (the default), Moltis also learns *between*
+compactions. Deterministic counters track how long the agent has worked
+without persisting anything: completed turns without a memory write, and
+tool-loop iterations without a skill write (both default to 10, configurable
+via `learning.memory_review_interval` / `learning.skill_review_interval`).
+
+When a counter trips at the end of a turn, a **background review fork** runs:
+a second agent pass over the recent conversation that can only call memory and
+skill tools (capped at `learning.max_review_iterations`). It saves user
+preferences and durable facts with `memory_save`, and creates or patches
+`SKILL.md` playbooks when a reusable technique emerged — preferring to improve
+existing class-level skills over minting narrow new ones. Destructive skill
+operations are excluded from the fork. Counters reset whenever the foreground
+agent writes memory or skills itself, so reviews only fire after stretches of
+work that produced no persisted learning.
+
+When `learning.enabled = false`, the pre-existing interval-based extraction
+(`memory.auto_extract_interval`) runs instead.
+
 ## Architecture
 
 ```

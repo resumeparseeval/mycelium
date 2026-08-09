@@ -729,6 +729,15 @@ port = {port}                           # Port number (auto-generated for this i
 # backend = "builtin"               # "builtin" | "qmd"
 # provider = "auto"                 # "local" | "ollama" | "openai" | "custom"
 
+# Learning loop: after stretches of work with nothing persisted, a background
+# review fork (memory + skill tools only) replays the conversation and saves
+# durable learnings — memory entries and skill updates.
+# [learning]
+# enabled = true
+# memory_review_interval = 10       # Turns without a memory write before a memory review (0 = off)
+# skill_review_interval = 10        # Tool iterations without a skill write before a skill review (0 = off)
+# max_review_iterations = 16        # Iteration cap for one review run
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PHONE (Telephony Providers)
 # ══════════════════════════════════════════════════════════════════════════════

@@ -3,6 +3,7 @@
 pub mod auth_profiles;
 pub mod docs;
 pub mod json_repair;
+pub mod learning;
 pub mod memory_writer;
 pub mod model;
 pub mod multimodal;

@@ -81,6 +81,7 @@
   - [`memory`](#memory)
   - [`memory.qmd`](#memoryqmd)
   - [`memory.qmd.collections.<name>`](#memoryqmdcollectionsname)
+  - [`learning`](#learning)
 - **Scheduling & Webhooks**
   - [`heartbeat`](#heartbeat)
   - [`heartbeat.active_hours`](#heartbeatactive-hours)
@@ -750,6 +751,25 @@ Each channel account (`channels.<channel_type>.<account_name>`) is an arbitrary 
 |-----|------|---------|-------------|
 | `paths` | array of string | `[]` | Paths to include in this collection. |
 | `globs` | array of string | `[]` | Glob patterns to filter files. |
+
+
+### `learning`
+
+**Struct:** `LearningConfig`
+
+The learning loop: after stretches of work with nothing persisted, a background
+review fork replays the recent conversation with only memory and skill tools
+available and saves durable learnings (memory entries, skill updates). Reviews
+are triggered by deterministic counters, never by an LLM judgment, so cost is
+predictable. When `enabled = false` the legacy interval-based silent memory
+extraction (`memory.auto_extract_interval`) runs instead.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `true` | Master switch for the background self-review fork. |
+| `memory_review_interval` | integer | `10` | Completed turns without a memory write before a memory review fires. `0` disables memory reviews. |
+| `skill_review_interval` | integer | `10` | Tool-loop iterations without a skill write before a skill review fires. `0` disables skill reviews. |
+| `max_review_iterations` | integer | `16` | Iteration cap for one review run. |
 
 
 ---

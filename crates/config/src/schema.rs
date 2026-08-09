@@ -15,6 +15,8 @@ mod chat;
 mod code_index;
 #[path = "schema/hooks.rs"]
 mod hooks;
+#[path = "schema/learning.rs"]
+mod learning;
 
 mod instrumentation;
 #[path = "schema/memory.rs"]
@@ -35,8 +37,8 @@ mod tools;
 mod voice;
 
 pub use {
-    agents::*, chat::*, code_index::*, hooks::*, instrumentation::*, memory::*, modes::*, phone::*,
-    providers::*, runtime::*, system::*, tools::*, voice::*,
+    agents::*, chat::*, code_index::*, hooks::*, instrumentation::*, learning::*, memory::*,
+    modes::*, phone::*, providers::*, runtime::*, system::*, tools::*, voice::*,
 };
 
 // ── Reasoning effort ──────────────────────────────────────────────────────
@@ -313,6 +315,8 @@ pub struct MoltisConfig {
     pub user: UserProfile,
     pub hooks: Option<HooksConfig>,
     pub memory: MemoryEmbeddingConfig,
+    /// Learning loop: counter-triggered background self-review.
+    pub learning: LearningConfig,
     pub tailscale: TailscaleConfig,
     pub netbird: NetbirdConfig,
     pub failover: FailoverConfig,

@@ -644,6 +644,15 @@ pub(super) fn build_schema_map() -> KnownKeys {
             ])),
         ),
         (
+            "learning",
+            Struct(HashMap::from([
+                ("enabled", Leaf),
+                ("memory_review_interval", Leaf),
+                ("skill_review_interval", Leaf),
+                ("max_review_iterations", Leaf),
+            ])),
+        ),
+        (
             "heartbeat",
             Struct(HashMap::from([
                 ("enabled", Leaf),
