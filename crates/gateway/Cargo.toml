@@ -38,7 +38,6 @@ moltis-discord          = { optional = true, workspace = true }
 moltis-external-agents  = { workspace = true }
 moltis-hermes-import    = { optional = true, workspace = true }
 moltis-home-assistant   = { optional = true, workspace = true }
-moltis-matrix           = { optional = true, workspace = true }
 moltis-mcp              = { workspace = true }
 moltis-mcp-agent-bridge = { workspace = true }
 moltis-media            = { workspace = true }
@@ -130,7 +129,6 @@ default = [
   "langfuse",
   "local-llm",
   "local-llm-metal",
-  "matrix",
   "mdns",
   "metrics",
   "msteams",
@@ -180,13 +178,11 @@ local-llm = [
 local-llm-cuda = ["local-llm", "moltis-providers/local-llm-cuda"]
 local-llm-metal = ["local-llm", "moltis-providers/local-llm-metal"]
 local-llm-vulkan = ["local-llm", "moltis-providers/local-llm-vulkan"]
-matrix = ["dep:moltis-matrix"]
 mdns = ["dep:mdns-sd"]
 metrics = [
   "dep:moltis-metrics",
   "moltis-chat/metrics",
   "moltis-discord?/metrics",
-  "moltis-matrix?/metrics",
   "moltis-metrics/sqlite",
   "moltis-msteams?/metrics",
   "moltis-nostr?/metrics",

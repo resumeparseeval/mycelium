@@ -180,7 +180,6 @@ full = [
   "local-embeddings",
   "local-llm",
   "local-llm-metal",
-  "matrix",
   "mdns",
   "metrics",
   "msteams",
@@ -253,7 +252,6 @@ local-llm = ["moltis-gateway/local-llm"]
 local-llm-cuda = ["local-llm", "moltis-gateway/local-llm-cuda"]
 local-llm-metal = ["local-llm", "moltis-gateway/local-llm-metal"]
 local-llm-vulkan = ["local-llm", "moltis-gateway/local-llm-vulkan"]
-matrix = ["moltis-httpd/matrix"]
 mdns = ["moltis-gateway/mdns"]
 metrics = ["moltis-httpd/metrics", "moltis-web?/metrics"]
 msteams = ["moltis-httpd/msteams"]
