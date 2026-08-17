@@ -58,6 +58,8 @@ default-members = [
   "crates/swift-bridge",
   "crates/tailscale",
   "crates/telegram",
+  "crates/tasks",
+  "crates/tasks",
   "crates/telephony",
   "crates/tls",
   "crates/tools",
@@ -130,6 +132,7 @@ members = [
   "crates/swift-bridge",
   "crates/tailscale",
   "crates/telegram",
+  "crates/tasks",
   "crates/telephony",
   "crates/tls",
   "crates/tools",
@@ -434,6 +437,7 @@ moltis-splitter         = { path = "crates/splitter" }
 moltis-swift-bridge     = { path = "crates/swift-bridge" }
 moltis-tailscale        = { path = "crates/tailscale" }
 moltis-telegram         = { path = "crates/telegram" }
+moltis-tasks            = { path = "crates/tasks" }
 moltis-telephony        = { path = "crates/telephony" }
 moltis-tls              = { path = "crates/tls" }
 moltis-tools            = { path = "crates/tools" }

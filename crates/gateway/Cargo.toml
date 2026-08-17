@@ -66,6 +66,7 @@ moltis-skills           = { workspace = true }
 moltis-slack            = { optional = true, workspace = true }
 moltis-tailscale        = { optional = true, workspace = true }
 moltis-telegram         = { optional = true, workspace = true }
+moltis-tasks            = { workspace = true }
 moltis-telephony        = { optional = true, workspace = true }
 moltis-tools            = { workspace = true }
 moltis-vault            = { optional = true, workspace = true }

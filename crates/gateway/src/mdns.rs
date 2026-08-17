@@ -52,7 +52,20 @@ pub fn register(
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "moltis-gateway".to_string());
 
-    let host_label = "moltis-gateway.local.".to_string();
+    // Prefer Tailscale hostname (e.g., mini.follow-ionian.ts.net) if available,
+    // otherwise fall back to synthetic .local address
+    let tailscale_host = std::env::var("TAILSCALE_HOSTNAME").ok();
+    let host_label = tailscale_host
+        .clone()
+        .or_else(|| {
+            // Check if hostname contains .ts.net (Tailscale MagicDNS)
+            if host.contains(".ts.net") {
+                Some(format!("{}.", host))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "moltis-gateway.local.".to_string());
 
     let port_value = port.to_string();
     let properties = [
@@ -95,6 +108,7 @@ pub fn register(
     tracing::info!(
         service_type = SERVICE_TYPE,
         instance = instance_name,
+        host = host_label,
         port,
         "mDNS service registered"
     );
