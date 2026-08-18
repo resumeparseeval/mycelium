@@ -36,6 +36,7 @@ moltis-service-traits = { workspace = true }
 moltis-sessions       = { workspace = true }
 moltis-skills         = { workspace = true }
 moltis-slack          = { optional = true, workspace = true }
+moltis-tasks          = { workspace = true }
 moltis-telephony      = { optional = true, workspace = true }
 moltis-tls            = { optional = true, workspace = true }
 moltis-tools          = { workspace = true }
@@ -47,6 +48,7 @@ reqwest               = { workspace = true }
 rustls                = { optional = true, workspace = true }
 secrecy               = { workspace = true }
 serde                 = { workspace = true }
+sqlx                  = { workspace = true }
 serde_json            = { workspace = true }
 sysinfo               = { workspace = true }
 tempfile              = { workspace = true }

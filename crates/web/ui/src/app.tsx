@@ -75,6 +75,7 @@ import "./pages/ProjectsPage";
 import "./pages/SkillsPage";
 import "./pages/MetricsPage";
 import "./pages/SettingsPage"; // also imports channels, providers, mcp, hooks, images, logs
+import "./pages/tasks";
 
 // Import side-effect modules
 import "./nav-counts";

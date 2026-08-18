@@ -33,6 +33,7 @@ pub(crate) struct SpaRoutes {
     crons: &'static str,
     monitoring: &'static str,
     graphql: &'static str,
+    tasks: &'static str,
 }
 
 pub(crate) static SPA_ROUTES: SpaRoutes = SpaRoutes {
@@ -50,6 +51,7 @@ pub(crate) static SPA_ROUTES: SpaRoutes = SpaRoutes {
     crons: "/settings/crons",
     monitoring: "/monitoring",
     graphql: "/settings/graphql",
+    tasks: "/tasks",
 };
 
 // ── GonData ──────────────────────────────────────────────────────────────────

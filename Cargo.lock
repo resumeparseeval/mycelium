@@ -6944,6 +6944,7 @@ dependencies = [
  "moltis-skills",
  "moltis-slack",
  "moltis-tailscale",
+ "moltis-tasks",
  "moltis-telegram",
  "moltis-telephony",
  "moltis-tools",
@@ -7072,6 +7073,7 @@ dependencies = [
  "moltis-sessions",
  "moltis-skills",
  "moltis-slack",
+ "moltis-tasks",
  "moltis-telephony",
  "moltis-tls",
  "moltis-tools",
@@ -7745,6 +7747,24 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "moltis-tasks"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -28,8 +28,8 @@ impl TaskService {
         .bind(&task.description)
         .bind(status)
         .bind(priority)
-        .bind(task.created_at)
-        .bind(task.updated_at)
+        .bind(task.created_at.to_rfc3339())
+        .bind(task.updated_at.to_rfc3339())
         .execute(&self.pool)
         .await
         .map_err(|e| Error::Database(e.to_string()))?;
@@ -144,8 +144,8 @@ impl TaskService {
         .bind(status.as_str())
         .bind(&assigned_to)
         .bind(priority)
-        .bind(now)
-        .bind(completed_at)
+        .bind(now.to_rfc3339())
+        .bind(completed_at.map(|dt| dt.to_rfc3339()))
         .bind(task_id)
         .execute(&self.pool)
         .await
@@ -164,7 +164,7 @@ impl TaskService {
             .bind(task_id)
             .bind(&response.agent_name)
             .bind(&response.content)
-            .bind(response.created_at)
+            .bind(response.created_at.to_rfc3339())
             .execute(&self.pool)
             .await
             .map_err(|e| Error::Database(e.to_string()))?;
