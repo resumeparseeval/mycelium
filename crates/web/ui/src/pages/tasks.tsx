@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { signal } from "@preact/signals";
 import { useEffect } from "preact/hooks";
-import { Badge } from "../components/forms/badge";
+import { Badge } from "../components/forms";
 import { registerPrefix } from "../router";
 import { routes } from "../routes";
 import { type Task, TaskStatus } from "../types/tasks";
